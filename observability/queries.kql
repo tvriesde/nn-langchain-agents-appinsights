@@ -1,0 +1,44 @@
+// Run in Application Insights Logs (requests/dependencies schema).
+// Replace the values below with the conversation ID or trace ID from the app.
+
+// All agent and dependency spans across turns in one conversation.
+let conversation = "REPLACE_WITH_CONVERSATION_ID";
+union requests, dependencies
+| extend conversationId = coalesce(tostring(customDimensions["gen_ai.conversation.id"]), session_Id)
+| where conversationId == conversation
+| extend agent = tostring(customDimensions["gen_ai.agent.name"]),
+         turn = tostring(customDimensions["recipe.turn.id"])
+| project timestamp, itemType, name, agent, turn, operation_Id, id,
+          operation_ParentId, session_Id, duration, success
+| order by timestamp asc
+
+// Agent identities and model token usage for a single trace.
+let traceId = "REPLACE_WITH_TRACE_ID";
+union requests, dependencies
+| where operation_Id == traceId
+| extend operation = tostring(customDimensions["gen_ai.operation.name"]),
+         agent = tostring(customDimensions["gen_ai.agent.name"]),
+         model = tostring(customDimensions["gen_ai.request.model"]),
+         inputTokens = tolong(customDimensions["gen_ai.usage.input_tokens"]),
+         outputTokens = tolong(customDimensions["gen_ai.usage.output_tokens"])
+| where operation in ("invoke_agent", "chat")
+| project timestamp, name, operation, agent, model, inputTokens, outputTokens,
+          duration, success, operation_ParentId, id
+| order by timestamp asc
+
+// Per-turn totals: count only model spans to avoid double-counting parents.
+let conversation = "REPLACE_WITH_CONVERSATION_ID";
+dependencies
+| where tostring(customDimensions["gen_ai.conversation.id"]) == conversation
+| where tostring(customDimensions["gen_ai.operation.name"]) == "chat"
+| summarize modelCalls = count(),
+            inputTokens = sum(tolong(customDimensions["gen_ai.usage.input_tokens"])),
+            outputTokens = sum(tolong(customDimensions["gen_ai.usage.output_tokens"]))
+    by operation_Id, turn = tostring(customDimensions["recipe.turn.id"])
+
+// Errors/logs correlated with one failed turn.
+let traceId = "REPLACE_WITH_TRACE_ID";
+union exceptions, traces
+| where operation_Id == traceId
+| project timestamp, itemType, message, outerMessage, severityLevel, customDimensions
+| order by timestamp asc

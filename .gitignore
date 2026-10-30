@@ -1,0 +1,17 @@
+.venv/
+backend/.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+node_modules/
+frontend/dist/
+backend/dist/
+*.egg-info/
+infra/*.json
+!infra/*.parameters.json
+*.log
+*.tsbuildinfo
+.azure/validate-status.json
